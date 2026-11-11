@@ -1,126 +1,98 @@
 import os
 import threading
-import base64
 import requests
 import telebot
 import urllib.parse
 from flask import Flask
 
-# --- Flask ওয়েব সার্ভার (Render 24/7 চালু রাখার জন্য) ---
+# --- Flask ওয়েব সার্ভার (Render ২৪/৭ চালু রাখার জন্য) ---
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Gemini AI Core is running online 24/7!", 200
+    return "OpenRouter AI Bot is running online 24/7!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, use_reloader=False)
 
-# --- কনফিগারেশন ও নতুন সঠিক API Keys ---
+# --- কনফিগারেশন ---
 BOT_TOKEN = "8963227766:AAFzvFGTJIOSAIUS_v4-sqx2bMNxpp40ujs"
-GEMINI_KEY = "AIzaSyDZyPULj_rCgtn3Nz2h-CbmE5qQ4JszrF0"
-ACTIVE_MODEL = "gemini-2.5-flash"
+OPENROUTER_KEY = "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"
+
+# OpenRouter এর সম্পূর্ণ ফ্রি সুপারফাস্ট মডেল
+MODEL_NAME = "google/gemini-2.0-flash-exp:free"
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
 
 # প্রতিটি ইউজারের চ্যাট স্মৃতি (Conversation Memory)
 user_memory = {}
 
-# জেমিনি ফুল এআই ব্রেন (আমার মতো উত্তর ও কোডিং করার ইঞ্জিন)
-def call_gemini(user_id, prompt_text):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{ACTIVE_MODEL}:generateContent?key={GEMINI_KEY}"
-    headers = {"Content-Type": "application/json"}
+# OpenRouter এআই ইঞ্জিন
+def ask_ai(user_id, prompt_text):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://render.com",
+        "X-Title": "Telegram AI Assistant"
+    }
 
     if user_id not in user_memory:
-        user_memory[user_id] = []
+        user_memory[user_id] = [
+            {
+                "role": "system",
+                "content": (
+                    "তুমি অত্যন্ত বুদ্ধিমান, অমায়িক এবং পারদর্শী অল-ইন-ওয়ান সুপার এআই সহকারী। "
+                    "তুমি খাঁটি এবং সাবলীল বাংলায় কথা বলবে। ইউজারের যেকোনো প্রশ্ন, প্রোগ্রামিং কোড, "
+                    "চ্যানেল পোস্ট রাইটিং, অংক এবং সমস্যা সমাধানের নিখুঁত ও বাস্তবসম্মত উত্তর দেবে।"
+                )
+            }
+        ]
 
-    # ইউজার মেসেজ মেমোরিতে যুক্ত
-    user_memory[user_id].append({
-        "role": "user",
-        "parts": [{"text": prompt_text}]
-    })
+    user_memory[user_id].append({"role": "user", "content": prompt_text})
 
-    # মেমোরি অতিরিক্ত বড় হলে পুরনো ৫টি মেসেজ কেটে ফেলা (সর্বশেষ ১০টি রাখা)
+    # চ্যাট হিস্ট্রি বড় হলে পুরনো মেসেজ ছেঁটে ফেলা
     if len(user_memory[user_id]) > 10:
-        user_memory[user_id] = user_memory[user_id][-10:]
+        user_memory[user_id] = [user_memory[user_id][0]] + user_memory[user_id][-9:]
 
-    system_instruction = (
-        "তুমি জেমিনি (Gemini)-এর মতো একজন অত্যন্ত বুদ্ধিমান, অমায়িক, স্পষ্টভাষী ও অল-ইন-ওয়ান সুপার এআই সহকারী। "
-        "তুমি খাঁটি এবং সাবলীল বাংলায় কথা বলবে। তোমার দায়িত্ব হলো ইউজারকে কোডিং, সমস্যা সমাধান, ফেসবুক/টেলিগ্রাম পোস্ট তৈরি, "
-        "যেকোনো টেকনিক্যাল বিষয়, অনুবাদ এবং নিখুঁত বাস্তবসম্মত তথ্য দিয়ে সাহায্য করা।"
-    )
-
-    # API পেলোড তৈরি
     payload = {
-        "system_instruction": {
-            "parts": [{"text": system_instruction}]
-        },
-        "contents": user_memory[user_id]
+        "model": MODEL_NAME,
+        "messages": user_memory[user_id]
     }
 
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=35)
         if res.status_code == 200:
             data = res.json()
-            reply = data["candidates"][0]["content"]["parts"][0]["text"]
-            # বটের উত্তর মেমোরিতে সেভ রাখা
-            user_memory[user_id].append({
-                "role": "model",
-                "parts": [{"text": reply}]
-            })
+            reply = data["choices"][0]["message"]["content"]
+            user_memory[user_id].append({"role": "assistant", "content": reply})
             return reply
         else:
-            return f"⚠️ সার্ভার এরর: {res.status_code}\nবিবরণ: {res.text}"
+            return f"⚠️ সার্ভার এরর: {res.status_code}\n{res.text}"
     except Exception as e:
         return f"⚠️ কানেকশন এরর: {e}"
 
-# ছবি দেখে বোঝার ভিশন ইঞ্জিন
-def analyze_image(image_bytes, caption):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{ACTIVE_MODEL}:generateContent?key={GEMINI_KEY}"
-    headers = {"Content-Type": "application/json"}
-    b64_image = base64.b64encode(image_bytes).decode("utf-8")
-    
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": f"এই ছবিটি নিখুঁতভাবে দেখে বাংলায় বিস্তারিত বুঝিয়ে বলো:\n{caption}"},
-                    {"inline_data": {"mime_type": "image/jpeg", "data": b64_image}}
-                ]
-            }
-        ]
-    }
-    try:
-        res = requests.post(url, headers=headers, json=payload, timeout=40)
-        if res.status_code == 200:
-            data = res.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        return f"⚠️ ইমেজ প্রসেসিং এরর: {res.status_code}"
-    except Exception as e:
-        return f"⚠️ বিশ্লেষণ এরর: {e}"
-
-# --- টেলিগ্রাম হ্যান্ডলারস ---
+# --- বট হ্যান্ডলারস ---
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     text = (
-        "👋 **হ্যালো! আমি আপনার অল-ইন-ওয়ান জেমিনি সুপার এআই বট।**\n\n"
-        "✨ **আমি কী কী করতে পারি:**\n"
-        "• সাবলীল বাংলায় মানুষের মতো কথা বলা ও স্মৃতি ধরে রাখা\n"
-        "• নিখুঁত প্রোগ্রামিং কোড লেখা, সমাধান ও বাগ ফিক্স\n"
-        "• যেকোনো ফেসবুক/টেলিগ্রাম চ্যানেলের ভাইরাল পোস্ট ও কনটেন্ট রাইটিং\n"
-        "• ছবি পাঠালে তার পুরো বিশ্লেষণ ও টেক্সট পড়া\n"
-        "• নতুন এআই ছবি তৈরি: `/image আপনার প্রম্পট`\n"
-        "• স্মৃতি রিসেট করতে: `/clear`\n\n"
-        "আমাকে যেকোনো প্রশ্ন লিখে পাঠিয়ে দিন!"
+        "👋 **হ্যালো! আমি আপনার ফুল-পাওয়ারড এআই সহকারী।**\n\n"
+        "💡 **আমার সুবিধাগুলো:**\n"
+        "• সাবলীল বাংলায় মানুষের মতো চ্যাট ও প্রশ্ন সমাধান\n"
+        "• নিখুঁত প্রোগ্রামিং কোড লেখা ও বাগ ফিক্সিং\n"
+        "• প্রফেশনাল টেলিগ্রাম/ফেসবুক পোস্ট তৈরি\n"
+        "• এআই ছবি তৈরি: `/image আপনার প্রম্পট`\n"
+        "• স্মৃতি রিসেট করতে: `/clear` লিখুন\n\n"
+        "যেকোনো প্রশ্ন লিখে এখনই পাঠিয়ে দিন!"
     )
     bot.reply_to(message, text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['clear', 'reset'])
 def reset_chat_memory(message):
     user_memory.pop(message.from_user.id, None)
-    bot.reply_to(message, "🧹 আপনার সাথে পূর্বের চ্যাট মেমোরি রিসেট করা হয়েছে!")
+    bot.reply_to(message, "🧹 পূর্বের চ্যাট মেমোরি রিসেট করা হয়েছে!")
 
 @bot.message_handler(commands=['image', 'draw'])
 def generate_ai_image(message):
@@ -131,7 +103,7 @@ def generate_ai_image(message):
 
     bot.send_chat_action(message.chat.id, 'upload_photo')
     status = bot.reply_to(message, "🎨 ছবিটি তৈরি করা হচ্ছে, কিছুক্ষণ অপেক্ষা করুন...")
-    
+
     encoded_prompt = urllib.parse.quote(prompt)
     image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
     try:
@@ -139,18 +111,6 @@ def generate_ai_image(message):
         bot.delete_message(message.chat.id, status.message_id)
     except Exception as e:
         bot.edit_message_text(f"⚠️ ছবি পাঠানো যায়নি: {e}", chat_id=message.chat.id, message_id=status.message_id)
-
-@bot.message_handler(content_types=['photo'])
-def handle_photo(message):
-    bot.send_chat_action(message.chat.id, 'typing')
-    try:
-        file_info = bot.get_file(message.photo[-1].file_id)
-        downloaded = bot.download_file(file_info.file_path)
-        caption = message.caption if message.caption else "এই ছবিতে কী আছে বাংলায় বিস্তারিত বিশ্লেষণ করো।"
-        reply = analyze_image(downloaded, caption)
-        bot.reply_to(message, reply)
-    except Exception as e:
-        bot.reply_to(message, f"⚠️ এরর: {e}")
 
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
@@ -166,9 +126,8 @@ def handle_text(message):
         return
 
     bot.send_chat_action(message.chat.id, 'typing')
-    response = call_gemini(message.from_user.id, user_text)
-    
-    # টেলিগ্রাম ৪০০০ ক্যারেক্টার মেসেজ লিমিট হ্যান্ডেল করা
+    response = ask_ai(message.from_user.id, user_text)
+
     if len(response) > 4000:
         for i in range(0, len(response), 4000):
             bot.reply_to(message, response[i:i+4000])
@@ -184,10 +143,8 @@ def start_bot():
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
 
 if __name__ == "__main__":
-    # ব্যাকগ্রাউন্ডে টেলিগ্রাম পোলিং চালু
     bot_thread = threading.Thread(target=start_bot)
     bot_thread.daemon = True
     bot_thread.start()
-    
-    # Render-এর জন্য ওয়েব সার্ভার চালু রাখা
+
     run_flask()
