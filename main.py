@@ -17,7 +17,7 @@ def run_flask():
     app.run(host="0.0.0.0", port=port, use_reloader=False)
 
 # --- কনফিগারেশন ---
-BOT_TOKEN = "8963227766:AAFzvFGTJIOSAIUS_v4-sqx2bMNxpp40ujs"
+BOT_TOKEN = "8963227766:AAF629TGOWqmujbsr-AA69sm6sz_cpB0jW4"
 OPENROUTER_KEY = "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"
 
 # OpenRouter এর সম্পূর্ণ ফ্রি সুপারফাস্ট মডেল
